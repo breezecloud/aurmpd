@@ -8,7 +8,9 @@ export default class PlayerQueue extends Component {
 	state = {
 		queue: null
 	}
-
+	componentDidMount(){
+		this.props.events.publish({event:"playerEnqueued"})
+	}
 	constructor(props, context) {
 		super(props, context);
 		props.events.subscribe({
@@ -22,12 +24,28 @@ export default class PlayerQueue extends Component {
 
 	receive(event) {
 		switch (event.event) {
-			case "playerEnqueued": this.setState({queue: event.data}); break;
+			case "playerEnqueued": 
+				fetch("/api/queue")
+				.then(response =>{
+					if (!response.ok) {
+						throw new Error(`HTTP request failed,status: ${response.status}`);
+					}
+					return response.json();//注意：返回的是JavaScript 对象
+				})
+				.then((data) => {
+					this.setState({queue: data});
+					console.log(data);
+				})
+				.catch(error => {
+					console.error('request error:', error.message);
+				});					
+				break;
 		}
 	}
 
 	clear() {
-		this.props.events.publish({event: "playerEnqueue", data: {action: "ADD", tracks: this.state.queue}});
+		//this.props.events.publish({event: "playerEnqueue", data: {action: "ADD", tracks: this.state.queue}});
+		this.props.events.publish({event: "playerEnqueue", data: {action: "REPLACE", tracks: []}});
 	}
 
 	playlist() {

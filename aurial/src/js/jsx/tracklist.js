@@ -3,25 +3,42 @@ import {IconMessage,CoverArt} from './common'
 import {SecondsToTime} from '../util'
 
 export default class TrackList extends Component {
-	state = {
-		queue: [],
-		playing: null
-	}
 
 	constructor(props, context) {
 		super(props, context);
+		this.state = {
+			queue: props.tracks,
+			currentsongid: -1
+		}
 		props.events.subscribe({
 			subscriber: this,
-			event: ["playerStarted", "playerStopped", "playerFinished", "playerEnqueued"]
+			event: ["mpdstatus"]
 		});
 	}
+	//当queue组件更新queue时，本地组件也同时更新queue
+    componentDidUpdate(prevProps) {
+        if (prevProps.tracks!== this.props.tracks) {
+			this.setState({queue:this.props.tracks});
+		}
+	}	
 
 	receive(event) {
 		switch (event.event) {
-			case "playerStarted": this.setState({playing: event.data}); break;
-			case "playerStopped":
-			case "playerFinished": this.setState({playing: null}); break;
-			case "playerEnqueued": this.setState({queue: event.data.map(function(q) {return q.id} )}); break;
+			case "mpdstatus":
+				if(event.data.currentsongid != this.state.currentsongid){
+					var track =null;
+					for (const find_track of this.state.queue) {
+						if (find_track.queue_sid === event.data.currentsongid) {
+							track = find_track;
+							break;
+						}
+					}
+					if(track != null){//需在queue里找到新的sid才做变更
+						this.props.events.publish({event: "songchange",data:track});
+						this.setState({currentsongid:event.data.currentsongid});
+					}
+				}
+			break;
 		}
 	}
 
@@ -31,8 +48,8 @@ export default class TrackList extends Component {
 			tracks = this.props.tracks.map(function (entry) {
 				return (
 					<Track key={entry.id} subsonic={this.props.subsonic} events={this.props.events} track={entry}
-						playing={this.state.playing != null && this.state.playing.id == entry.id}
-						queued={this.state.queue.indexOf(entry.id) > -1} playlist={this.props.playlist}
+						playing={this.state.currentsongid == entry.queue_sid}
+						queued={'queue_sid' in entry} playlist={this.props.playlist}
 						iconSize={this.props.iconSize} />
 				);
 			}.bind(this));
@@ -60,7 +77,6 @@ export default class TrackList extends Component {
 }
 
 class Track extends Component {
-
 	constructor(props, context) {
 		super(props, context);
 
@@ -71,11 +87,19 @@ class Track extends Component {
 	}
 
 	play() {
-		this.props.events.publish({event: "playerPlay", data: this.props.track});
+		if('queue_sid' in this.props.track){//在queue中播放当前歌曲
+			this.props.events.publish({event: "playtrack", data: {queue_sid: this.props.track.queue_sid}});
+		}else{//在playlist中加入queue并且播放加入的歌曲
+			this.props.events.publish({event: "playerEnqueue", data: {action: "ADDPLAY", tracks: [this.props.track]}});
+		}
 	}
 
 	enqueue() {
-		this.props.events.publish({event: "playerEnqueue", data: {action: "ADD", tracks: [this.props.track]}});
+		if('queue_sid' in this.props.track){//在queue中删除该歌曲
+			this.props.events.publish({event: "playerEnqueue", data: {action: "DEL", tracks: this.props.track}});
+		}else{//在playlist中加入queue
+			this.props.events.publish({event: "playerEnqueue", data: {action: "ADD", tracks: [this.props.track]}});
+		}		
 	}
 
 	playlistAdd() {

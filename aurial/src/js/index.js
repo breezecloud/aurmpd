@@ -1,16 +1,15 @@
 import {h, render} from 'preact'
 import Subsonic from './subsonic'
 import App from './jsx/app'
-
 /**
 * Application bootstrap
 */
 const subsonic = new Subsonic(
-	localStorage.getItem('url') || 'http://localhost:4040',
-	localStorage.getItem('username') || '',
+	localStorage.getItem('url') || 'https://demo.navidrome.org',
+	localStorage.getItem('username') || 'demo',
 	localStorage.getItem('token') || '',
 	localStorage.getItem('salt') || '',
-	"1.13.0", "Aurial"
+	"0.1.0", "Aurmpd"
 );
 
 const container = document.createElement('app');

@@ -52,7 +52,6 @@ class SelectionAlbum extends Component {
 
 	play() {
 		this.props.events.publish({event: "playerEnqueue", data: {action: "REPLACE", tracks: this.props.album.song}});
-		this.props.events.publish({event: "playerPlay", data: this.props.album.song[0]});
 	}
 
 	enqueue() {

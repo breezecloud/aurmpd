@@ -311,7 +311,6 @@ class PlaylistInfo extends Component {
 
 	play() {
 		this.props.events.publish({event: "playerEnqueue", data: {action: "REPLACE", tracks: this.props.playlist.entry}});
-		this.props.events.publish({event: "playerPlay", data: this.props.playlist.entry[0]});
 	}
 
 	enqueue() {

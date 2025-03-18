@@ -7,29 +7,31 @@ module.exports = {
   target: "web",
   entry: path.resolve(__dirname, 'js'),
   output: {
-    path: path.resolve(__dirname, '..', 'dist'),
+    path: path.resolve(__dirname, '../../build', 'htdocs'),
     filename: 'index.js'
   },
   plugins: [
-		new webpack.DefinePlugin({
-		  'process.env': {
-		    NODE_ENV: JSON.stringify('production')
-		  }
-		}),
+    new webpack.DefinePlugin({
+      'process.env': {
+        NODE_ENV: JSON.stringify('production')
+      }
+    }),
+    /*
     new webpack.optimize.UglifyJsPlugin({
       compress: {
         warnings: false,
         dead_code: true
       }
     }),
+    */
     new HtmlWebpackPlugin({
       title: 'Aurial',
       template: 'src/index.html'
     }),
-		new CopyWebpackPlugin([
-			{from: 'src/css', to: 'css'},
-			{from: 'README.md'}
-		])
+    new CopyWebpackPlugin([
+      {from: 'src/css', to: 'css'},
+      {from: 'README.md'}
+    ])
   ],
   module: {
     rules: [
@@ -38,9 +40,9 @@ module.exports = {
         loader: 'babel-loader',
         exclude: /node_modules/,
         options: {
-					"plugins": [
-						["transform-react-jsx", { "pragma": "h" }]
-					],
+          "plugins": [
+            ["transform-react-jsx", { "pragma": "h" }]
+          ],
           "presets": ["es2015", "stage-0"]
         }
       }

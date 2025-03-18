@@ -40,7 +40,7 @@ export default class App extends Component {
 		}
 	}
 
-	render() {
+	render() {	
 		var player = <Player subsonic={this.state.subsonic} events={this.events} trackBuffer={this.state.trackBuffer} persist={this.state.persistQueue} />;
 
 		var selection = <Selection subsonic={this.state.subsonic} events={this.events} iconSize="20" />;
@@ -167,7 +167,7 @@ class Links extends Component {
 	render() {
 		return (
 			<div className="links">
-				<a href="https://github.com/shrimpza/aurial">
+				<a href="https://github.com/breezecloud/aurmpd">
 					<i className="github icon"></i>
 					<span>Aurial on GitHub</span>
 				</a>

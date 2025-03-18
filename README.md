@@ -1,5 +1,5 @@
 # aurmpd介绍
-aurmpd名字的来源于aurial(https://github.com/shrimpza/aurial)和mpd(https://www.musicpd.org/)。aurial是一个基于浏览器的HTML/JavaScript客户端界面，用于从Subsonic、Airsonic、Navidrome或其他实现Subsonic API的软件和服务中流式传输音乐，无需使用Flash播放器或插件。我借助aurial的代码和ympd(https://www.ympd.org/)的架构，开发了aurmpd音乐播放软件，和aurial不同的是不使用html5的audio控件，而是集成了mpd和一个web服务器(mongoose:http://mongoose.ws)。这样aurmpd具备了mpd强大的音频播放能力，同时可以在windows或者linux上不借助于第三方软件独立运行。
+aurmpd名字的来源于[aurial](https://github.com/shrimpza/aurial)和[mpd](https://www.musicpd.org/)。aurial是一个基于浏览器的HTML/JavaScript客户端界面，用于从Subsonic、Airsonic、Navidrome或其他实现Subsonic API的软件和服务中流式传输音乐，无需使用Flash播放器或插件。我借助aurial的代码和ympd(https://www.ympd.org/)的架构，开发了aurmpd音乐播放软件，和aurial不同的是不使用html5的audio控件，而是集成了mpd和一个web服务器[mongoose](http://mongoose.ws)。这样aurmpd借助mpd强大的音频播放能力，同时在windows上可以直接运行而不依赖任何其它软件，而在linux上需要mpd正常工作。
 ## 特点
 1. 后端播放程序为著名的开源音乐播放软件mpd，前端为纯浏览器(websocket支持)。mpd本身是跨平台应用，目前应用支持windows和linux平台。
 2. 可以支持多种音乐格式，大多数的主流音乐格式都支持，比如：mp3，flac，wav，dts等，取决于后端应用mpd对文件格式的支持。

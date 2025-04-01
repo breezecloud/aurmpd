@@ -8,7 +8,7 @@ aurmpd名字的来源于[aurial](https://github.com/shrimpza/aurial)和[mpd](htt
 3. 播放音乐处于后台，可以关闭前台浏览器界面，不会引起音乐中断，同时播放队列也放在后台，所以关闭浏览器后会继续播放队列里的音乐。
 4. 可以多个浏览器或不同终端上同时进行播放控制，多个播放界面之间状态同步。
 ## 安装&使用
-1. 预编译包下载地址：xxx
+1. 预编译包下载地址：https://github.com/breezecloud/aurmpd/releases
 2. 本软件不需要安装，直接下载软件包解压到本机。windows平台已经集成了mpd软件，启动程序为winaurmpd.exe，启动后程序后台运行，状态栏有icon可以打开前端页面。在linux平台，确认电脑已经正确安装好mpd，启动程序为aurmpd。
 3. windows平台的mpd配置文件是当前目录下的mpd.conf。在第一次启动winaurmpd.exe时会自动生成mpd.conf，其中输出设备是系统默认设备，本地音乐目录默认缺省为系统“音乐”文件夹。可以手动修改配置(参考模板说明)，需重新启动才能生效。Linux平台依赖之前已经安装好mpd配置，不需要设置。
 4. 页面可以打开本机浏览器`http://127.0.0.1:8600`，或者从其它电脑打开浏览器`http://you.aurmpd.ip:8600`。

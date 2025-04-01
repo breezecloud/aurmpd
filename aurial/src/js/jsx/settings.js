@@ -78,7 +78,7 @@ export default class Settings extends Component {
 
 			this.setState({
 				url: "http://demo.subsonic.org",
-				user: "guest5",
+				user: "guest",
 				password: "guest"
 			});
 

@@ -12,7 +12,7 @@ module.exports = {
   devtool: 'cheap-module-eval-source-map',
   plugins: [
     new HtmlWebpackPlugin({
-      title: 'Aurial',
+      title: 'Aurmpd',
       template: 'src/index.html'
     }),
     new CopyWebpackPlugin([{

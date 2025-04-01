@@ -263,8 +263,8 @@ export default class Subsonic {
 	getStreamUrl(params) {
 		return this.getUrl('stream', {
 			id: params.id,
-			format: params.format ? params.format : 'mp3',
-			maxBitRate: params.bitrate ? params.bitrate : 0
+			//format: params.format ? params.format : 'mp3',
+			//maxBitRate: params.bitrate ? params.bitrate : 0
 		});
 	}
 

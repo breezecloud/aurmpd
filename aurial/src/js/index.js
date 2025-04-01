@@ -9,7 +9,7 @@ const subsonic = new Subsonic(
 	localStorage.getItem('username') || 'demo',
 	localStorage.getItem('token') || '',
 	localStorage.getItem('salt') || '',
-	"0.1.0", "Aurmpd"
+	"1.13.0", "Aurmpd"
 );
 
 const container = document.createElement('app');

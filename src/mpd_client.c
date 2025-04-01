@@ -747,3 +747,30 @@ void mpd_disconnect()
     mpd.conn_state = MPD_DISCONNECT;
     mpd_poll(NULL);
 }
+
+void mpd_clear_all()
+{
+    if (mpd.conn != NULL) {
+        // 标记响应接收结束
+        //mpd_response_finish(mpd.conn);
+        // 停止播放
+        if (!mpd_run_stop(mpd.conn)) {
+            fprintf(stderr, "Failed to stop playback: %s\n", mpd_connection_get_error_message(mpd.conn));
+        }
+        // 清空播放队列
+        if (!mpd_run_clear(mpd.conn)) {
+            fprintf(stderr, "Failed to clear playlist: %s\n", mpd_connection_get_error_message(mpd.conn));
+        }
+        // 刷新数据库
+        if (!mpd_run_update(mpd.conn, NULL)) {
+            fprintf(stderr, "Failed to update database: %s\n", mpd_connection_get_error_message(mpd.conn));
+        }
+        // 清除错误信息
+        if (!mpd_run_clearerror(mpd.conn)) {
+            fprintf(stderr, "Failed to clear error: %s\n", mpd_connection_get_error_message(mpd.conn));
+        }
+        mpd_disconnect();
+    }else
+        fprintf(stderr, "mpd.conn is NULL\n");
+
+}

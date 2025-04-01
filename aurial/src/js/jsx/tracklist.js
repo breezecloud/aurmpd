@@ -25,7 +25,7 @@ export default class TrackList extends Component {
 	receive(event) {
 		switch (event.event) {
 			case "mpdstatus":
-				if(event.data.currentsongid != this.state.currentsongid){
+				if(event.data.currentsongid != this.state.currentsongid){//status的songid发生改变发送songchange
 					var track =null;
 					for (const find_track of this.state.queue) {
 						if (find_track.queue_sid === event.data.currentsongid) {
@@ -45,6 +45,7 @@ export default class TrackList extends Component {
 	render() {
 		var tracks = []
 		if (this.props.tracks && this.props.tracks.length > 0) {
+			//console.log("this.props.tracks:"+JSON.stringify(this.props.tracks));
 			tracks = this.props.tracks.map(function (entry) {
 				return (
 					<Track key={entry.id} subsonic={this.props.subsonic} events={this.props.events} track={entry}
@@ -87,7 +88,7 @@ class Track extends Component {
 	}
 
 	play() {
-		if('queue_sid' in this.props.track){//在queue中播放当前歌曲
+		if('queue_sid' in this.props.track){//已经在queue列表中
 			this.props.events.publish({event: "playtrack", data: {queue_sid: this.props.track.queue_sid}});
 		}else{//在playlist中加入queue并且播放加入的歌曲
 			this.props.events.publish({event: "playerEnqueue", data: {action: "ADDPLAY", tracks: [this.props.track]}});

@@ -6,6 +6,11 @@
 #include <endpointvolume.h>
 #include <functiondiscoverykeys_devpkey.h>
 
+// 自定义布尔类型
+typedef int bool;
+#define true 1
+#define false 0
+
 // 定义托盘图标 ID
 #define IDI_AurmpdICON 1
 // 定义菜单 ID
@@ -13,11 +18,19 @@
 #define IDM_OPEN 101
 #define IDM_ABOUT 102
 
+#define TARGET_URL L"http://127.0.0.1:8600"
+#define PIPE_NAME L"\\\\.\\pipe\\AurmpdPipe"
+#define BUFFER_SIZE 1024
+
 // 全局变量，用于存储窗口句柄
 HWND hWnd;
 // 全局变量，用于存储子进程的进程句柄
 HANDLE hChildProcess_mpd = NULL;
 HANDLE hChildProcess_aurmpd = NULL;
+
+// 前置声明 GracefullyCloseProcess 函数
+BOOL GracefullyCloseProcess(HANDLE hProcess);
+
 
 // 获取默认音频播放设备名称
 BOOL GetDefaultAudioDeviceName(wchar_t* deviceName, size_t bufferSize) {
@@ -26,24 +39,20 @@ BOOL GetDefaultAudioDeviceName(wchar_t* deviceName, size_t bufferSize) {
     IMMDevice* defaultDevice = NULL;
     IPropertyStore* propertyStore = NULL;
     PROPVARIANT varName;
-
     // 手动定义GUID
     static const GUID CLSID_MMDeviceEnumerator = {0xbcde0395, 0xe52f, 0x467c, {0x8e, 0x3d, 0xc4, 0x57, 0x92, 0x91, 0x69, 0x2e}};
     static const GUID IID_IMMDeviceEnumerator = {0xa95664d2, 0x9614, 0x4f35, {0xa7, 0x46, 0xde, 0x8d, 0xb6, 0x36, 0x17, 0xe6}};
-
     // 初始化 COM 库
     hr = CoInitialize(NULL);
     if (FAILED(hr)) {
         return FALSE;
     }
-
     // 创建设备枚举器实例
     hr = CoCreateInstance(&CLSID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER, &IID_IMMDeviceEnumerator, (LPVOID*)&deviceEnumerator);
     if (FAILED(hr)) {
         CoUninitialize();
         return FALSE;
     }
-
     // 获取默认音频渲染设备
     hr = deviceEnumerator->lpVtbl->GetDefaultAudioEndpoint(deviceEnumerator, eRender, eConsole, &defaultDevice);
     if (FAILED(hr)) {
@@ -51,7 +60,6 @@ BOOL GetDefaultAudioDeviceName(wchar_t* deviceName, size_t bufferSize) {
         CoUninitialize();
         return FALSE;
     }
-
     // 获取设备属性存储
     hr = defaultDevice->lpVtbl->OpenPropertyStore(defaultDevice, STGM_READ, &propertyStore);
     if (FAILED(hr)) {
@@ -60,10 +68,8 @@ BOOL GetDefaultAudioDeviceName(wchar_t* deviceName, size_t bufferSize) {
         CoUninitialize();
         return FALSE;
     }
-
     // 初始化属性值变量
     PropVariantInit(&varName);
-
     // 获取设备友好名称
     hr = propertyStore->lpVtbl->GetValue(propertyStore, &PKEY_Device_FriendlyName, &varName);
     if (SUCCEEDED(hr)) {
@@ -72,13 +78,11 @@ BOOL GetDefaultAudioDeviceName(wchar_t* deviceName, size_t bufferSize) {
         }
         PropVariantClear(&varName);
     }
-
     // 释放资源
     propertyStore->lpVtbl->Release(propertyStore);
     defaultDevice->lpVtbl->Release(defaultDevice);
     deviceEnumerator->lpVtbl->Release(deviceEnumerator);
     CoUninitialize();
-
     return SUCCEEDED(hr);
 }
 
@@ -96,7 +100,10 @@ BOOL CheckAndCopyFiles() {
             // 打开源文件和目标文件
             src = fopen("mpd.conf.tmp", "rb");
             dst = fopen("mpd.conf", "wb");
-
+            if (src == NULL || dst == NULL) {
+                MessageBox(NULL, "Failed to open mpd.conf files", "Error", MB_OK | MB_ICONERROR);
+                return FALSE;
+            }
             if (src && dst) {
                 // 复制文件内容
                 while ((bytesRead = fread(buffer, 1, sizeof(buffer), src)) > 0) {
@@ -111,7 +118,7 @@ BOOL CheckAndCopyFiles() {
                     fwrite(audio_output_start, strlen(audio_output_start), 1, dst);
                     // 转换为 UTF - 8 并写入文件
                     int len = WideCharToMultiByte(CP_UTF8, 0, deviceName, -1, NULL, 0, NULL, NULL);
-                    char* utf8DeviceName = (char*)malloc(len);
+                    char* utf8DeviceName = (char*)malloc(len+1);
                     if (utf8DeviceName) {
                         WideCharToMultiByte(CP_UTF8, 0, deviceName, -1, utf8DeviceName, len, NULL, NULL);
                         fwrite(utf8DeviceName, 1, len -1 , dst);
@@ -151,24 +158,37 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             nid.uID = IDI_AurmpdICON;
             nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
             nid.uCallbackMessage = WM_USER + 1;
-            nid.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+            // 加载自定义图标
+            HICON hIcon = (HICON)LoadImage(
+                GetModuleHandle(NULL),
+                //MAKEINTRESOURCE(IDI_AurmpdICON),
+                "IDI_AurmpdICON",
+                IMAGE_ICON,
+                0, 0, // 指定需要的尺寸
+                LR_DEFAULTCOLOR
+            );
+            if (hIcon == NULL) {
+                DWORD err = GetLastError();
+                TCHAR msg[256];
+                FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, err, 0, msg, 256, NULL);
+                MessageBox(NULL, msg, "Failed to load icon", MB_OK | MB_ICONERROR);
+                hIcon = LoadIcon(NULL, IDI_APPLICATION);
+            }
+            nid.hIcon = hIcon; 
             // 设置托盘图标提示信息
-            lstrcpy(nid.szTip, "My Aurmpd Application");
+            lstrcpy(nid.szTip, "Aurmpd Application");
             Shell_NotifyIcon(NIM_ADD, &nid);
 
             // 启动后自动最小化到系统托盘
             ShowWindow(hwnd, SW_MINIMIZE);
 
             // 启动子进程
-            STARTUPINFO si;
+            STARTUPINFO si = { sizeof(STARTUPINFO) };
+            si.cb = sizeof(STARTUPINFO);
+            si.wShowWindow = SW_HIDE; // 隐藏子进程窗口
+            si.dwFlags |= STARTF_USESHOWWINDOW;
             PROCESS_INFORMATION pi;
-
-            ZeroMemory(&si, sizeof(si));
-            si.cb = sizeof(si);
-            ZeroMemory(&pi, sizeof(pi));
-
             // 创建mpd子进程   
-
             char command1[] = "mpd.exe mpd.conf";
             if (!CreateProcess(NULL, command1, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
                 MessageBox(hwnd, "Failed to start mpd process", "Error", MB_OK | MB_ICONERROR);
@@ -176,7 +196,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 // 保存子进程的句柄
                 hChildProcess_mpd = pi.hProcess;
                 // 关闭线程句柄，因为我们不需要它
-                CloseHandle(pi.hThread);
+                CloseHandle(pi.hThread);           
             }
             // 创建aurmpd子进程   
             char command2[] = "aurmpd.exe";
@@ -186,33 +206,61 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 // 保存子进程的句柄
                 hChildProcess_aurmpd = pi.hProcess;
                 // 关闭线程句柄，因为我们不需要它
-                CloseHandle(pi.hThread);
+                CloseHandle(pi.hThread);                 
             }
+            
             // 启动后打开浏览器并访问指定网址
-            ShellExecute(NULL, "open", "http://127.0.0.1:8600", NULL, NULL, SW_SHOWNORMAL);
+            ShowWindow(hwnd, SW_HIDE); 
+            ShellExecuteW(hwnd, L"open", TARGET_URL, NULL, NULL, SW_SHOWNOACTIVATE);
             break;
         }
-        case WM_DESTROY: {
+        case WM_DESTROY: {          
             // 移除系统托盘图标
-            NOTIFYICONDATA nid;
-            nid.cbSize = sizeof(NOTIFYICONDATA);
+            NOTIFYICONDATA nid = { sizeof(NOTIFYICONDATA) };
             nid.hWnd = hwnd;
             nid.uID = IDI_AurmpdICON;
-            Shell_NotifyIcon(NIM_DELETE, &nid);
+            if (!Shell_NotifyIcon(NIM_DELETE, &nid)) {
+                MessageBox(hwnd, "Failed to remove tray icon", "Error", MB_OK | MB_ICONERROR);
+            }
 
-            // 关闭子进程
+            // 通过命名管道发送CLOSE命令关闭aurmpd.exe子进程
+            if (hChildProcess_aurmpd && (hChildProcess_aurmpd != INVALID_HANDLE_VALUE)) {
+                HANDLE hPipe = CreateFileW(
+                    PIPE_NAME,
+                    GENERIC_WRITE,
+                    0,
+                    NULL,
+                    OPEN_EXISTING,
+                    0,
+                    NULL
+                );
+                //打开成功
+                if (hPipe != INVALID_HANDLE_VALUE) {
+                    const char* message = "CLOSE";
+                    DWORD bytesWritten;
+                    if (WriteFile(hPipe, message, (DWORD)strlen(message), &bytesWritten, NULL)) {
+                        wprintf(L"Message sent successfully.\n");
+                    } else {
+                        wprintf(L"Failed to send message. Error code: %lu\n", GetLastError());
+                    }
+                    // 关闭句柄
+                    CloseHandle(hPipe);                
+                }else{//打开pipe失败强制关闭
+                    GracefullyCloseProcess(hChildProcess_aurmpd);
+                }                 
+            }
+            Sleep(2000);//waiting 2s
+            if (hChildProcess_mpd && hChildProcess_mpd != INVALID_HANDLE_VALUE) {
+                GracefullyCloseProcess(hChildProcess_mpd);
+            }
+            // 关闭进程句柄
             if (hChildProcess_mpd != NULL) {
-                // 终止子进程 todo：如何更优雅的关闭子进程
-                TerminateProcess(hChildProcess_mpd, 0);
-                // 关闭进程句柄
                 CloseHandle(hChildProcess_mpd);
-            }  
+            }
             if (hChildProcess_aurmpd != NULL) {
-                // 终止子进程 todo：如何更优雅的关闭子进程
-                TerminateProcess(hChildProcess_aurmpd, 0);
-                // 关闭进程句柄
                 CloseHandle(hChildProcess_aurmpd);
-            }                                  
+            }
+    
             PostQuitMessage(0);
             break;
         }
@@ -230,9 +278,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     POINT pt;
                     GetCursorPos(&pt);
 
-                    // 显示弹出菜单
-                    SetForegroundWindow(hwnd);
-                    TrackPopupMenu(hMenu, TPM_RIGHTBUTTON, pt.x, pt.y, 0, hwnd, NULL);
+                    // 显示弹出菜单，避免激活主窗口
+                    UINT cmd = TrackPopupMenuEx(hMenu, TPM_RIGHTBUTTON | TPM_NOANIMATION | TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, hwnd, NULL);
+                    if (cmd > 0) {
+                        SendMessage(hwnd, WM_COMMAND, cmd, 0);
+                    }
                     DestroyMenu(hMenu);
                     break;
                 }
@@ -242,21 +292,24 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_COMMAND: {
             // 处理菜单命令
             switch (LOWORD(wParam)) {
-                case IDM_EXIT: {
+                case IDM_EXIT: {                 
                     // 退出应用程序
                     DestroyWindow(hwnd);
                     break;
                 }
                 case IDM_OPEN: {
                     // 打开浏览器并访问指定网址
-                    ShellExecute(NULL, "open", "http://127.0.0.1:8600", NULL, NULL, SW_SHOWNORMAL);
+                    ShowWindow(hwnd, SW_HIDE); 
+                    ShellExecuteW(hwnd, L"open", TARGET_URL, NULL, NULL, SW_SHOWNOACTIVATE);
                     break;
                 }
                 case IDM_ABOUT: {
-                    const wchar_t* aboutText = L"aurmpd music player version 0.1.0\n"
+                    const wchar_t* aboutText = L"aurmpd music player version 0.2.0\n"
                                                L"By luping(luping@189.cn)\n"
                                                L"https://github.com/breezecloud/aurmpd/";
-                    MessageBoxW(hwnd, aboutText, L"About", MB_OK | MB_ICONINFORMATION);
+                    // 确保主窗口隐藏
+                    ShowWindow(hwnd, SW_HIDE);                                               
+                    MessageBoxW(hwnd, aboutText, L"About",MB_OK | MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND);
                     break;
                 }                
             }
@@ -268,22 +321,83 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     return 0;
 }
 
+// 优雅关闭子进程
+BOOL GracefullyCloseProcess(HANDLE hProcess) {
+    if (hProcess == NULL) {
+        return TRUE;
+    }
+
+    // 获取进程 ID
+    DWORD dwProcessId = GetProcessId(hProcess);
+    if (dwProcessId == 0) {
+        return FALSE;
+    }
+
+    // 尝试向进程发送关闭信号
+    /*
+    if (GenerateConsoleCtrlEvent(CTRL_C_EVENT, dwProcessId)) {        
+        // 等待进程退出
+        if (WaitForSingleObject(hProcess, 5000) == WAIT_OBJECT_0) { 
+            return TRUE;
+        }
+    }
+    */
+    // 强制终止进程
+    return TerminateProcess(hProcess, 0);
+}
+
 // 主函数
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR szCmdLine, int iCmdShow) {
-    // 注册窗口类
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    bool debugMode = false;
+
+    for (int i = 1; i < argc; ++i) {
+        if (wcscmp(argv[i], L"-d") == 0) {
+            debugMode = true;
+            break;
+        }
+    }
+
+    if (!debugMode) {
+        // 在后台执行
+        /*
+        if (GetConsoleWindow()) {
+            FreeConsole();
+        }*/
+        STARTUPINFOW si = { sizeof(si) };
+        PROCESS_INFORMATION pi;
+        wchar_t szCommandLine[MAX_PATH];
+        GetModuleFileNameW(NULL, szCommandLine, MAX_PATH);
+        wcscat_s(szCommandLine, MAX_PATH, L" -d");
+        if (CreateProcessW(NULL, szCommandLine, NULL, NULL, FALSE, CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP, NULL, NULL, &si, &pi)) {
+            CloseHandle(pi.hProcess);
+            CloseHandle(pi.hThread);
+            return 0;
+        }
+    }
+
+    LocalFree(argv); 
+       
     WNDCLASS wc = {0};
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
     wc.lpszClassName = "AurmpdAppClass";
+    wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_AurmpdICON));
+    
+    if (wc.hIcon == NULL) {
+        wc.hIcon = LoadIcon(NULL, IDI_APPLICATION); // 使用默认图标作为备用
+    }
     RegisterClass(&wc);
 
-    // 创建窗口
-    hWnd = CreateWindow(wc.lpszClassName, "Aurmpd Application", WS_OVERLAPPEDWINDOW,
-                        CW_USEDEFAULT, CW_USEDEFAULT, 200, 200, NULL, NULL, hInstance, NULL);
+    // 创建窗口，使用 WS_EX_TOOLWINDOW WS_POPUP 样式并设置大小为 0x0，使得窗口不可见
+    hWnd = CreateWindowEx(WS_EX_TOOLWINDOW, wc.lpszClassName, "Aurmpd Application", WS_POPUP | WS_EX_TOOLWINDOW,
+        0, 0, 0, 0, NULL, NULL, hInstance, NULL);        
 
     if (hWnd == NULL) {
         return 0;
     }
+    
     // 消息循环
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {

@@ -25,11 +25,12 @@ module.exports = {
     }),
     */
     new HtmlWebpackPlugin({
-      title: 'Aurial',
+      title: 'Aurmpd',
       template: 'src/index.html'
     }),
     new CopyWebpackPlugin([
       {from: 'src/css', to: 'css'},
+      {from: 'src/js/jquery-2.2.1.min.js', to: 'js'},
       {from: 'README.md'}
     ])
   ],

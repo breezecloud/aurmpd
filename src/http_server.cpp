@@ -2,12 +2,30 @@
 #include <string>
 #include "http_server.hpp"
 #include "json.hpp"
-#include "song_queue.hpp"
+#include "song.hpp"
+//#include "queue.hpp"
+#include "mpdqueue.hpp"
+#include "library.hpp"
+
 
 using json = nlohmann::json;
 
-SongQueue SQ;
+Mpdqueue SQ;
+Library LQ;
 
+//查询某专辑的数据，id在post数据中
+std::string queryAlbum(struct mg_http_message *hm){
+    json j;
+    try {
+        // 解析 JSON 字符串
+        std::string json_str = std::string(hm->body.buf,(int) hm->body.len);
+        j = json::parse(json_str);
+    } catch (const json::parse_error& e) {
+        // 处理解析错误
+        std::cerr << "JSON parsing error: " << e.what() << std::endl;
+    }
+    return LQ.AlbumToJson(j["album"]);
+}
 //根据post内容加入track到mpd的queue，并且返回第一个加入的queue_sid;
 int addTrackTompd(struct mg_http_message *hm){
     json jsonArray;
@@ -99,15 +117,15 @@ void callback_http(struct mg_connection *c,struct mg_http_message *hm,const char
     }else if(mg_match(hm->uri, mg_str("/api/queue/add/*"), NULL)) {//将浏览器发送的json转成song并加入mpd queue
         if(mg_match(hm->method, mg_str("POST"),NULL)){
             //printf("POST request body: %.*s\n", (int) hm->body.len, hm->body.buf);
-             queue_sid = addTrackTompd(hm);
+             queue_sid = addTrackTompd(hm);//添加track到queue
             if(mg_match(hm->uri, mg_str("/api/queue/add/play"), NULL))
-               SQ.playSId(queue_sid);
+               SQ.playSid(queue_sid);//播放
             mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", SQ.toJson().c_str());
         }
     }else if(mg_match(hm->uri, mg_str("/api/queue/replace/*"), NULL)) {//将浏览器发送的json转成song并替换mpd queue
         if(mg_match(hm->method, mg_str("POST"),NULL)){
             //printf("POST request body: %.*s\n", (int) hm->body.len, hm->body.buf);
-            SQ.clearQueue();
+            SQ.clear();
             addTrackTompd(hm);
             if(mg_match(hm->uri, mg_str("/api/queue/replace/play"), NULL))
                 SQ.playPos(0);
@@ -122,6 +140,15 @@ void callback_http(struct mg_connection *c,struct mg_http_message *hm,const char
     }else if(mg_match(hm->uri, mg_str("/api/queue"), NULL)) { //查询队列
         if(mg_match(hm->method, mg_str("GET"),NULL)){
             mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", SQ.toJson().c_str());
+        }
+    }else if(mg_match(hm->uri, mg_str("/api/library"), NULL)) { //查询专辑列表
+        if(mg_match(hm->method, mg_str("GET"),NULL)){
+            LQ.clear();// clear first
+            LQ.getMpdDB();
+            mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", LQ.allAlbumToJson().c_str());
+        }
+        if(mg_match(hm->method, mg_str("POST"),NULL)){//查询某专辑，查询id在post中
+            mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s", queryAlbum(hm).c_str());
         }
     }else{
         struct mg_http_serve_opts opts = {.root_dir = s_root_dir};  // For all other URLs,

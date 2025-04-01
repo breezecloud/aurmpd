@@ -1,12 +1,26 @@
 extern "C" {
     #include <stdlib.h>
+    #include <stdio.h>
+    #include <signal.h>
     #include "mongoose.h"
     #include "mpd_client.h"   
 }
 
+#include <iostream>
 #include "http_server.hpp"
-static const char *s_listen_on = "ws://0.0.0.0:8600";
-static int s_debug_level = MG_LL_DEBUG; //MG_LL_NONE, MG_LL_ERROR, MG_LL_INFO, MG_LL_DEBUG, MG_LL_VERBOSE
+
+
+#ifdef _WIN32
+    #include <windows.h>
+    #include "winpipe.hpp"
+    HANDLE hClientPipe;
+#else
+    #define closesocket(x) close(x)
+    #include <pthread.h>
+#endif
+
+static const char *s_listen_on = "0.0.0.0:8600";
+static int s_debug_level = MG_LL_INFO; //MG_LL_NONE, MG_LL_ERROR, MG_LL_INFO, MG_LL_DEBUG, MG_LL_VERBOSE
 static const char *s_root_dir = "./htdocs";
 
 int force_exit = 0;
@@ -15,12 +29,18 @@ void bye(){
     force_exit = 1;
 }
 
+// 信号处理函数
+void signal_handler(int signum) {
+    if (signum == SIGINT) {
+        fprintf(stderr,"Interrupted by user. Exiting...\n");
+        bye();
+    }
+}
+
 static void start_thread(void *(*f)(void *), void *p) {
     #ifdef _WIN32
       _beginthread((void(__cdecl *)(void *)) f, 0, p);
-    #else
-    #define closesocket(x) close(x)
-    #include <pthread.h>
+    #else   
       pthread_t thread_id = (pthread_t) 0;
       pthread_attr_t attr;
       (void) pthread_attr_init(&attr);
@@ -28,20 +48,39 @@ static void start_thread(void *(*f)(void *), void *p) {
       pthread_create(&thread_id, &attr, f, p);
       pthread_attr_destroy(&attr);
     #endif
-    }
+}
     
-    static void *thread_function(void *param) {
+    static void *thread_poll_function(void *param) {
       struct thread_data *p = (struct thread_data *) param;
-      MG_INFO(("thread started: "));
+      MG_INFO(("mpd poll thread started: "));
       for (;;) {
+        if(force_exit)
+            break;
         sleep(1);
         mpd_poll(p);
-        //mg_wakeup(p->mgr, p->conn_id, "hi!", 3);  // Send to parent
+
       }
       // Free all resources that were passed to us
       free(p);
       return NULL;
     }
+
+    #ifdef _WIN32
+        static void *thread_pipe_function(void *param){
+            struct thread_data *p = (struct thread_data *) param;
+            MG_INFO(("pipe thread started: "));
+            for (;;) {
+                sleep(1);
+                if(pipe_poll(p)){
+                    bye();
+                    break;
+                }
+            }        
+            // Free all resources that were passed to us
+            free(p);
+            return NULL;    
+        }
+    #endif
 
 static void server_callback(struct mg_connection *c, int ev, void *ev_data) {
     struct mg_http_message *hm;
@@ -54,7 +93,7 @@ static void server_callback(struct mg_connection *c, int ev, void *ev_data) {
                 data->conn_id = c->id;
                 data->mgr = c->mgr;
                 c->fn_data = data;
-                start_thread(thread_function, data);  // Start thread and pass data        
+                start_thread(thread_poll_function, data);  // Start thread and pass data        
             }
             break;
         case MG_EV_HTTP_MSG:
@@ -93,6 +132,10 @@ static void server_callback(struct mg_connection *c, int ev, void *ev_data) {
 
 int main(int argc, char **argv)
 {
+    #ifdef _WIN32
+        // 修改控制台代码页为 UTF-8
+        system("chcp 65001");
+    #endif
     struct mg_mgr mgr;  // Mongoose 事件管理器
     struct mg_connection *c;  
 
@@ -102,7 +145,12 @@ int main(int argc, char **argv)
     strcpy(mpd.host, "127.0.0.1");
     
     mg_mgr_init(&mgr);  // 初始化事件管理器
-    // 设置 HTTP 监听器
+    #ifdef _WIN32
+        start_thread(thread_pipe_function, NULL);
+    #endif
+
+    // 注册信号处理函数
+    signal(SIGINT, signal_handler);    
     
     if ((c = mg_http_listen(&mgr, s_listen_on, server_callback, &mgr)) == NULL) {
         MG_ERROR(("Cannot listen on %s. Use http://ADDR:PORT or :PORT",
@@ -119,7 +167,7 @@ int main(int argc, char **argv)
         mg_mgr_poll(&mgr, 200);
     }    
     // 清理资源
-    mpd_disconnect();
+    mpd_clear_all();
     mg_mgr_free(&mgr);
     return EXIT_SUCCESS;
 }

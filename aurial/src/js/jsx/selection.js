@@ -19,8 +19,9 @@ export default class Selection extends Component {
 
 	receive(event) {
 		switch (event.event) {
-			case "browserSelected": this.setState({album: event.data.tracks}); break;
+			case "browserSelected": this.setState({album: event.data.tracks});break;	
 		}
+		
 	}
 
 	render() {
@@ -30,6 +31,7 @@ export default class Selection extends Component {
 			);
 
 		} else {
+			//console.log("event.data.tracks:"+JSON.stringify(this.state.album));
 			return (
 				<div className="ui basic segment selectionView">
 					<SelectionAlbum subsonic={this.props.subsonic} events={this.props.events} album={this.state.album} />

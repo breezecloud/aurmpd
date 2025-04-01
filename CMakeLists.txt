@@ -7,15 +7,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake/")
 set(CPACK_PACKAGE_VERSION_MAJOR "0")
-set(CPACK_PACKAGE_VERSION_MINOR "1")
+set(CPACK_PACKAGE_VERSION_MINOR "2")
 set(CPACK_PACKAGE_VERSION_PATCH "0")
 
-option(WITH_MPD_HOST_CHANGE "Let users of the web frontend change the MPD Host" ON)
-option(WITH_DYNAMIC_ASSETS "Serve assets dynamically (e.g for development/packaging)" OFF)
 option(WITH_IPV6 "enable IPv6 support" ON)
-option(WITH_SSL "enable SSL support" OFF)
-
-
 
 find_package(LibMPDClient REQUIRED)
 find_package(Threads REQUIRED)
@@ -38,6 +33,15 @@ if(WIN32)
     if(NOT UUID_LIBRARY)
         message(FATAL_ERROR "uuid library not found")
     endif()
+    # 设置资源文件路径
+    set(RESOURCE_FILE "${CMAKE_SOURCE_DIR}/src/resource.rc")
+    # 设置资源编译器为 windres（MinGW）
+    set(CMAKE_RC_COMPILER windres)
+    # 定义资源文件的编译命令（生成COFF格式对象文件）
+    set(CMAKE_RC_COMPILE_OBJECT
+        "<CMAKE_RC_COMPILER> <FLAGS> -O coff <DEFINES> -i <SOURCE> -o <OBJECT>"
+    )
+    enable_language(RC)  # 启用对资源文件的支持
 endif()
 
 configure_file(src/config.h.in ${PROJECT_BINARY_DIR}/config.h)
@@ -47,15 +51,6 @@ include(CheckCSourceCompiles)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99 -Wall")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -ggdb -pedantic")
-if(WITH_IPV6)
-    set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS NS_ENABLE_IPV6)
-endif()
-if(WITH_SSL)
-	find_package(OpenSSL REQUIRED)
-	include_directories(${OPENSSL_INCLUDE_DIR})
-#    list(APPEND LIB_LIST ${OPENSSL_LIBRARIES})
-    set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS NS_ENABLE_SSL)
-endif()
 
 set(SOURCES
     src/main.cpp
@@ -63,22 +58,20 @@ set(SOURCES
     src/mongoose.c
     src/json_encode.c
     src/http_server.cpp
-    src/song_queue.cpp
+    src/song.cpp
+    src/queue.cpp
+    src/library.cpp
+    src/album.cpp
+    src/mpdqueue.cpp
 )
 
 if(WIN32)
-    add_executable(winaurmpd src/winmain.c)
+    add_executable(winaurmpd src/winmain.c ${RESOURCE_FILE})
     target_link_libraries(winaurmpd PRIVATE ws2_32  ${OLE32_LIBRARY} ${UUID_LIBRARY}) 
 
-    add_executable(aurmpd ${SOURCES})
+    add_executable(aurmpd ${SOURCES} src/winpipe.cpp)
     target_link_libraries(aurmpd ${LIBMPDCLIENT_LIBRARY} ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ws2_32) 
 elseif(UNIX)
     add_executable(aurmpd ${SOURCES})
     target_link_libraries(aurmpd ${LIBMPDCLIENT_LIBRARY} ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES}) 
 endif()
-
-# install(TARGETS ympd DESTINATION bin)
-# install(FILES ympd.1 DESTINATION ${CMAKE_INSTALL_PREFIX}/share/man/man1)
-# if(WITH_DYNAMIC_ASSETS)
-#     install(DIRECTORY htdocs DESTINATION share/${PROJECT_NAME})
-# endif()

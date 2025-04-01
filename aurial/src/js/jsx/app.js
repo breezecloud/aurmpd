@@ -169,7 +169,7 @@ class Links extends Component {
 			<div className="links">
 				<a href="https://github.com/breezecloud/aurmpd">
 					<i className="github icon"></i>
-					<span>Aurial on GitHub</span>
+					<span>Aurmpd on GitHub</span>
 				</a>
 			</div>
 		);
